@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Gerador — Descomplicando o Juridiquês</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,700;0,900;1,500&family=Lato:ital,wght@0,400;0,700;0,900;1,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.2/html2pdf.bundle.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ============ TOPBAR MOBILE ============ -->
+<div class="mobile-topbar no-print">
+  <span class="mt-title">☰ Juridiquês</span>
+  <div class="mt-btns">
+    <button class="ghost" onclick="toggleSidebar()">📋 Editor</button>
+    <button class="pdf-trigger" onclick="generatePDF()">⭳ PDF</button>
+  </div>
+</div>
+<div class="sidebar-backdrop no-print" id="sidebarBackdrop" onclick="toggleSidebar(false)"></div>
+
+<div class="app-shell">
+
+  <!-- ============ SIDEBAR / EDITOR ============ -->
+  <div class="sidebar no-print" id="sidebarPanel">
+    <button class="ghost no-print" style="width:auto;float:right;padding:6px 10px;margin-top:-4px;display:none" id="sidebarCloseBtn" onclick="toggleSidebar(false)">✕ Fechar</button>
+    <h1>Descomplicando<br>o Juridiquês</h1>
+    <span class="tag">Gerador do dicionário</span>
+
+    <button onclick="openEntryModal()">+ Novo verbete</button>
+    <button class="secondary" onclick="openMetaModal()">Editar capa &amp; apresentação</button>
+    <button class="secondary" onclick="exportJSON()">⭳ Exportar dados (JSON)</button>
+    <button class="secondary" onclick="document.getElementById('importInput').click()">⭱ Importar dados (JSON)</button>
+    <input type="file" id="importInput" class="hidden-file" accept="application/json" onchange="importJSON(event)">
+    <button class="pdf-trigger" onclick="generatePDF()">⭳ Baixar PDF</button>
+
+    <div class="save-status" id="saveStatus"><span class="dot"></span><span id="saveStatusText">Salvo automaticamente neste navegador</span></div>
+    <div class="storage-note">
+      Os dados ficam guardados só neste navegador/computador (localStorage). Se for trocar de aparelho ou limpar o cache, use <b>Exportar dados</b> antes para não perder nada.
+      <button class="clear-link" onclick="clearStorage()">Apagar tudo e recomeçar</button>
+    </div>
+
+    <div class="section-label">Verbetes cadastrados</div>
+    <span class="count-badge" id="countBadge">0 verbetes</span>
+    <div id="entryList"></div>
+  </div>
+
+  <!-- ============ PREVIEW / LIVRO ============ -->
+  <div class="main">
+    <div class="toolbar-top no-print">
+      <span>Pré-visualização — role para ver o livro completo</span>
+      <span><b id="pageCount">0</b> páginas</span>
+    </div>
+    <div id="book"></div>
+  </div>
+</div>
+
+<!-- ============ MODAL: NOVO/EDITAR VERBETE ============ -->
+<div class="modal-overlay no-print" id="entryModalOverlay">
+  <div class="modal">
+    <h3 id="entryModalTitle">Novo verbete</h3>
+    <div class="sub">Preencha os campos abaixo. Os textos das caixas são exibidos em até 6 linhas na página impressa — prefira frases curtas e diretas.</div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Termo</label>
+        <input id="f_termo" placeholder="Ex: Acórdão">
+      </div>
+      <div class="field" style="max-width:120px">
+        <label>Letra</label>
+        <input id="f_letra" maxlength="1" placeholder="auto">
+        <small>Deixe em branco para usar a 1ª letra do termo</small>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Categoria (selo opcional)</label>
+        <input id="f_categoria" placeholder="Ex: Essencial">
+      </div>
+      <div class="field">
+        <label>Frequência de cobrança</label>
+        <select id="f_frequencia">
+          <option value="muito_cobrado">🟢 Muito cobrado</option>
+          <option value="cobrado_frequencia">🟡 Cobrado com frequência</option>
+          <option value="importante">🔵 Importante</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Definição jurídica</label>
+      <textarea id="f_definicao" placeholder="A explicação técnica, de forma objetiva."></textarea>
+    </div>
+
+    <div class="field">
+      <label>Você pode ouvir isso na aula</label>
+      <textarea id="f_aula" placeholder='Ex: "O Tribunal manteve a sentença por meio de um acórdão."'></textarea>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Traduzindo</label>
+        <textarea id="f_traduzindo" placeholder="A ideia principal em palavras simples."></textarea>
+      </div>
+      <div class="field">
+        <label>Exemplo prático</label>
+        <textarea id="f_exemplo" placeholder="Uma situação do dia a dia."></textarea>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Não confunda com... <small>(um item por linha)</small></label>
+        <textarea id="f_nao_confunda" placeholder="Sentença: decisão do juiz."></textarea>
+      </div>
+      <div class="field">
+        <label>Lembre-se</label>
+        <textarea id="f_lembre_se" placeholder="Ex: Acórdão = decisão do Tribunal."></textarea>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>🎯 Onde você vai ouvir isso? <small>(contextos separados por vírgula: Tribunal, OAB, Processo Civil...)</small></label>
+      <textarea id="f_onde_ouvir" placeholder="Tribunal, Processo Civil, Processo Penal, OAB, Concursos"></textarea>
+    </div>
+
+    <div class="field">
+      <label>Curiosidade</label>
+      <textarea id="f_curiosidade" placeholder="Um dado extra e interessante sobre o termo."></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeEntryModal()">Cancelar</button>
+      <button class="btn-save" onclick="saveEntry()">Salvar verbete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL: CAPA / APRESENTACAO ============ -->
+<div class="modal-overlay no-print" id="metaModalOverlay">
+  <div class="modal">
+    <h3>Capa &amp; apresentação</h3>
+    <div class="sub">Esses textos aparecem nas páginas iniciais do dicionário.</div>
+
+    <div class="field"><label>Coleção</label><input id="m_colecao"></div>
+    <div class="field"><label>Título completo (usado nos direitos autorais)</label><input id="m_titulo"></div>
+    <div class="field"><label>Subtítulo da capa</label><textarea id="m_subtitulo"></textarea></div>
+    <div class="field"><label>Autora</label><input id="m_autora"></div>
+    <div class="field">
+      <label>Texto da apresentação <small>(um parágrafo por linha; comece com • para virar tópico)</small></label>
+      <textarea id="m_apresentacao" style="min-height:180px"></textarea>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeMetaModal()">Cancelar</button>
+      <button class="btn-save" onclick="saveMeta()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/script.js"></script>
+</body>
+</html>
