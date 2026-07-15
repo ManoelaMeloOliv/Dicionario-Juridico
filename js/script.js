@@ -489,27 +489,50 @@ async function generatePDF(){
   const btns = document.querySelectorAll(".pdf-trigger");
   btns.forEach(b=>{ b.dataset.orig = b.textContent; b.disabled = true; });
 
-  // gera sempre a partir do tamanho real da página (sem a escala usada no celular)
+  // gera sempre a partir do tamanho real da página (sem a escala usada no celular).
+  // IMPORTANTE: no celular, cada página fica dentro de uma "moldura" com
+  // overflow:hidden (pra caber na tela). Só limpar o tamanho dela não bastava —
+  // a moldura continuava cortando a página na hora da captura. Por isso agora
+  // ela é removida por completo (a página volta a ser filha direta de #book).
   const wasMobile = window.innerWidth <= 900;
-  document.querySelectorAll("#book .page").forEach(p=>{ p.style.transform = ""; });
-  document.querySelectorAll("#book .page-scale-wrap").forEach(w=>{ w.style.width = ""; w.style.height = ""; });
+  document.querySelectorAll("#book .page").forEach(p=>{ p.style.transform = ""; p.style.height = "297mm"; });
+  document.querySelectorAll("#book .page-scale-wrap").forEach(wrap=>{
+    const page = wrap.querySelector(".page");
+    if(page && wrap.parentNode){
+      wrap.parentNode.insertBefore(page, wrap);
+      wrap.remove();
+    }
+  });
 
   const pages = Array.from(document.querySelectorAll("#book .page"));
   if(pages.length === 0){
     btns.forEach(b=>{ b.textContent = b.dataset.orig; b.disabled = false; });
     return;
   }
+  const scrollContainer = document.querySelector(".main");
+  const originalScrollTop = scrollContainer ? scrollContainer.scrollTop : window.scrollY;
 
   try{
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
 
+    // espera as fontes carregarem de verdade antes de tirar qualquer "foto"
+    if(document.fonts && document.fonts.ready){
+      try{ await document.fonts.ready; }catch(e){}
+    }
+
     for(let i=0;i<pages.length;i++){
       btns.forEach(b=>{ b.textContent = `Gerando PDF... (${i+1}/${pages.length})`; });
-      await new Promise(r=>setTimeout(r,0)); // deixa o navegador atualizar o texto do botão
+
+      // no celular (e às vezes no computador), o navegador só termina de "pintar"
+      // um trecho da página quando ele passa a ficar visível na tela — por isso
+      // rolamos até a página antes de fotografar, e esperamos 2 frames de desenho
+      pages[i].scrollIntoView({ block: "start", behavior: "instant" });
+      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
 
       const canvas = await html2canvas(pages[i], {
-        scale: 2, useCORS: true, allowTaint: true, logging: false
+        scale: 2, useCORS: true, allowTaint: true, logging: false,
+        backgroundColor: "#ffffff"
       });
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
       if(i > 0) pdf.addPage("a4","portrait");
@@ -524,7 +547,9 @@ async function generatePDF(){
     console.error(err);
     alert("Não foi possível gerar o PDF automaticamente. Tente novamente em alguns segundos.");
   }finally{
+    document.querySelectorAll("#book .page").forEach(p=>{ p.style.height = ""; });
     btns.forEach(b=>{ b.textContent = b.dataset.orig; b.disabled = false; });
+    if(scrollContainer) scrollContainer.scrollTop = originalScrollTop; else window.scrollTo(0, originalScrollTop);
     if(wasMobile) scalePagesForMobile();
   }
 }
