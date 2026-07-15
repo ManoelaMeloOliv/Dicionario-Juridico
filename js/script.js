@@ -480,46 +480,50 @@ function importJSON(evt){
 
 /* ======================================================================
    GERAR PDF DE VERDADE (baixa direto, sem passar pela caixa de impressão)
+   Captura cada página separadamente e monta o PDF juntando as imagens.
+   (Tirar uma única "foto" do livro inteiro estoura o limite de tamanho
+   de imagem do navegador em dicionários grandes, causando páginas em
+   branco e itens sumindo — por isso a captura é feita página por página.)
    ====================================================================== */
 async function generatePDF(){
   const btns = document.querySelectorAll(".pdf-trigger");
-  btns.forEach(b=>{ b.dataset.orig = b.textContent; b.textContent = "Gerando PDF..."; b.disabled = true; });
+  btns.forEach(b=>{ b.dataset.orig = b.textContent; b.disabled = true; });
 
   // gera sempre a partir do tamanho real da página (sem a escala usada no celular)
   const wasMobile = window.innerWidth <= 900;
   document.querySelectorAll("#book .page").forEach(p=>{ p.style.transform = ""; });
   document.querySelectorAll("#book .page-scale-wrap").forEach(w=>{ w.style.width = ""; w.style.height = ""; });
 
-  const element = document.getElementById("book");
-  const filename = (meta.titulo || "dicionario-juridico")
-    .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
-    .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"") + ".pdf";
-
-  // controla a quebra de página manualmente: uma quebra depois de cada .page,
-  // exceto a última (senão sobra uma página em branco no final)
-  const pageEls = element.querySelectorAll(".page");
-  pageEls.forEach((p,i)=>{
-    p.style.pageBreakAfter = (i < pageEls.length - 1) ? "always" : "auto";
-    p.style.breakAfter = (i < pageEls.length - 1) ? "page" : "auto";
-    p.style.marginBottom = "0"; // evita folga extra que empurra conteúdo para uma página a mais
-  });
-
-  const opt = {
-    margin: 0,
-    filename,
-    image: { type: "jpeg", quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true },
-    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-    pagebreak: { mode: ["css"] }
-  };
+  const pages = Array.from(document.querySelectorAll("#book .page"));
+  if(pages.length === 0){
+    btns.forEach(b=>{ b.textContent = b.dataset.orig; b.disabled = false; });
+    return;
+  }
 
   try{
-    await html2pdf().set(opt).from(element).save();
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+
+    for(let i=0;i<pages.length;i++){
+      btns.forEach(b=>{ b.textContent = `Gerando PDF... (${i+1}/${pages.length})`; });
+      await new Promise(r=>setTimeout(r,0)); // deixa o navegador atualizar o texto do botão
+
+      const canvas = await html2canvas(pages[i], {
+        scale: 2, useCORS: true, allowTaint: true, logging: false
+      });
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      if(i > 0) pdf.addPage("a4","portrait");
+      pdf.addImage(imgData, "JPEG", 0, 0, 210, 297);
+    }
+
+    const filename = (meta.titulo || "dicionario-juridico")
+      .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+      .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"") + ".pdf";
+    pdf.save(filename);
   }catch(err){
     console.error(err);
     alert("Não foi possível gerar o PDF automaticamente. Tente novamente em alguns segundos.");
   }finally{
-    pageEls.forEach(p=>{ p.style.pageBreakAfter=""; p.style.breakAfter=""; p.style.marginBottom=""; });
     btns.forEach(b=>{ b.textContent = b.dataset.orig; b.disabled = false; });
     if(wasMobile) scalePagesForMobile();
   }
